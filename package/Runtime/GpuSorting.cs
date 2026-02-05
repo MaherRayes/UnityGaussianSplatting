@@ -196,5 +196,66 @@ namespace GaussianSplatting.Runtime
                 (srcPayloadBuffer, dstPayloadBuffer) = (dstPayloadBuffer, srcPayloadBuffer);
             }
         }
+
+        public void DispatchIndirectCount(CommandBuffer cmd, Args args, GraphicsBuffer sortCountBuffer)
+        {
+            Assert.IsTrue(Valid);
+
+            GraphicsBuffer srcKeyBuffer = args.inputKeys;
+            GraphicsBuffer srcPayloadBuffer = args.inputValues;
+            GraphicsBuffer dstKeyBuffer = args.resources.altBuffer;
+            GraphicsBuffer dstPayloadBuffer = args.resources.altPayloadBuffer;
+
+            // We still dispatch for the MAX capacity (args.count), resources were allocated for that.
+            uint maxCount = args.count;
+            uint maxThreadBlocks = DivRoundUp(maxCount, DEVICE_RADIX_SORT_PARTITION_SIZE);
+
+            // Keep these as MAX; shader will clamp to b_sortCount for real work.
+            cmd.SetComputeIntParam(m_CS, "e_numKeys", (int)maxCount);
+            cmd.SetComputeIntParam(m_CS, "e_threadBlocks", (int)maxThreadBlocks);
+
+            // Bind the GPU count buffer to every kernel that needs numKeys/partial behavior
+            cmd.SetComputeBufferParam(m_CS, m_kernelUpsweep,   "b_sortCount", sortCountBuffer);
+            cmd.SetComputeBufferParam(m_CS, m_kernelScan,      "b_sortCount", sortCountBuffer);
+            cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_sortCount", sortCountBuffer);
+
+            // Static buffers
+            cmd.SetComputeBufferParam(m_CS, m_kernelUpsweep, "b_passHist", args.resources.passHistBuffer);
+            cmd.SetComputeBufferParam(m_CS, m_kernelUpsweep, "b_globalHist", args.resources.globalHistBuffer);
+
+            cmd.SetComputeBufferParam(m_CS, m_kernelScan, "b_passHist", args.resources.passHistBuffer);
+
+            cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_passHist", args.resources.passHistBuffer);
+            cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_globalHist", args.resources.globalHistBuffer);
+
+            // Clear global histogram
+            cmd.SetComputeBufferParam(m_CS, m_kernelInitDeviceRadixSort, "b_globalHist", args.resources.globalHistBuffer);
+            cmd.DispatchCompute(m_CS, m_kernelInitDeviceRadixSort, 1, 1, 1);
+
+            // 4 passes
+            for (uint radixShift = 0; radixShift < 32; radixShift += DEVICE_RADIX_SORT_BITS)
+            {
+                cmd.SetComputeIntParam(m_CS, "e_radixShift", (int)radixShift);
+
+                // Upsweep (dispatch MAX blocks; shader clamps via b_sortCount)
+                cmd.SetComputeBufferParam(m_CS, m_kernelUpsweep, "b_sort", srcKeyBuffer);
+                cmd.DispatchCompute(m_CS, m_kernelUpsweep, (int)maxThreadBlocks, 1, 1);
+
+                // Scan is fixed size
+                cmd.DispatchCompute(m_CS, m_kernelScan, (int)DEVICE_RADIX_SORT_RADIX, 1, 1);
+
+                // Downsweep (dispatch MAX blocks; shader early-outs gid>=activeBlocks)
+                cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_sort", srcKeyBuffer);
+                cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_sortPayload", srcPayloadBuffer);
+                cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_alt", dstKeyBuffer);
+                cmd.SetComputeBufferParam(m_CS, m_kernelDownsweep, "b_altPayload", dstPayloadBuffer);
+                cmd.DispatchCompute(m_CS, m_kernelDownsweep, (int)maxThreadBlocks, 1, 1);
+
+                // Swap
+                (srcKeyBuffer, dstKeyBuffer) = (dstKeyBuffer, srcKeyBuffer);
+                (srcPayloadBuffer, dstPayloadBuffer) = (dstPayloadBuffer, srcPayloadBuffer);
+            }
+        }
+
     }
 }

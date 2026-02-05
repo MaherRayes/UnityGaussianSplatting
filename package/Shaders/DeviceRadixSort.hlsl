@@ -52,9 +52,11 @@ void InitDeviceRadixSort(int3 id : SV_DispatchThreadID)
 inline void HistogramDigitCounts(uint gtid, uint gid)
 {
     const uint histOffset = gtid / 64 * RADIX;
-    const uint partitionEnd = gid == e_threadBlocks - 1 ?
-        e_numKeys : (gid + 1) * PART_SIZE;
-    for (uint i = gtid + gid * PART_SIZE; i < partitionEnd; i += US_DIM)
+    uint numKeys = GetActiveNumKeys();
+    uint partitionStart = gid * PART_SIZE;
+    uint partitionEnd   = min(numKeys, (gid + 1) * PART_SIZE);
+
+    for (uint i = gtid + partitionStart; i < partitionEnd; i += US_DIM)
     {
 #if defined(KEY_UINT)
         InterlockedAdd(g_us[ExtractDigit(b_sort[i]) + histOffset], 1);
@@ -451,6 +453,15 @@ inline void LoadThreadBlockReductions(uint gtid, uint gid, uint exclusiveHistRed
 [numthreads(D_DIM, 1, 1)]
 void Downsweep(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
+
+    uint numKeys = GetActiveNumKeys();
+    uint activeBlocks = (numKeys + PART_SIZE - 1) / PART_SIZE;
+
+    if (gid.x >= activeBlocks)
+        return;
+
+    bool isLastActive = (gid.x == activeBlocks - 1);
+
     KeyStruct keys;
     OffsetStruct offsets;
     const uint waveSize = getWaveSize();
@@ -458,20 +469,19 @@ void Downsweep(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     ClearWaveHists(gtid.x, waveSize);
     GroupMemoryBarrierWithGroupSync();
     
-    if (gid.x < e_threadBlocks - 1)
+    if (!isLastActive)
     {
         if (waveSize >= 16)
             keys = LoadKeysWGE16(gtid.x, waveSize, gid.x);
-        
+
         if (waveSize < 16)
             keys = LoadKeysWLT16(gtid.x, waveSize, gid.x, SerialIterations(waveSize));
     }
-        
-    if (gid.x == e_threadBlocks - 1)
+    else
     {
         if (waveSize >= 16)
             keys = LoadKeysPartialWGE16(gtid.x, waveSize, gid.x);
-        
+
         if (waveSize < 16)
             keys = LoadKeysPartialWLT16(gtid.x, waveSize, gid.x, SerialIterations(waveSize));
     }
@@ -523,9 +533,8 @@ void Downsweep(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     LoadThreadBlockReductions(gtid.x, gid.x, exclusiveHistReduction);
     GroupMemoryBarrierWithGroupSync();
     
-    if (gid.x < e_threadBlocks - 1)
+    if (!isLastActive)
         ScatterDevice(gtid.x, waveSize, gid.x, offsets);
-        
-    if (gid.x == e_threadBlocks - 1)
+    else
         ScatterDevicePartial(gtid.x, waveSize, gid.x, offsets);
 }
