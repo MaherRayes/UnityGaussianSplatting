@@ -33,7 +33,6 @@
 #pragma kernel Scan
 #pragma kernel Downsweep
 #pragma kernel BuildIndirectArgs
-//#pragma kernel ClearPassHist
 
 // GPU sorting needs wave ops
 #pragma require wavebasic
