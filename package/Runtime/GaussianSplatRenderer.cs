@@ -949,7 +949,7 @@ namespace GaussianSplatting.Runtime
 
             // sort the splats
             EnsureSorterAndRegister();
-            m_Sorter.DispatchIndirectCount(cmd, m_SorterArgs, m_GpuVisibleKeyCount);
+            m_Sorter.DispatchIndirect(cmd, m_SorterArgs, m_GpuVisibleKeyCount);
 
             cmd.EndSample(s_ProfSort);
         }
