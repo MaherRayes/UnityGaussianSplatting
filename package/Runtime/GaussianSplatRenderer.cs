@@ -121,12 +121,6 @@ namespace GaussianSplatting.Runtime
 
                 var mpb = kvp.Item2;
 
-                // sort
-                var matrix = gs.transform.localToWorldMatrix;
-                if (gs.m_FrameCounter % gs.m_SortNthFrame == 0)
-                    gs.SortPoints(cmb, cam, matrix);
-                ++gs.m_FrameCounter;
-
                 // cache view
                 kvp.Item2.Clear();
 
@@ -159,6 +153,12 @@ namespace GaussianSplatting.Runtime
                 cmb.BeginSample(s_ProfCalcView);
                 gs.CalcViewData(cmb, cam);
                 cmb.EndSample(s_ProfCalcView);
+				
+                // sort
+                var matrix = gs.transform.localToWorldMatrix;
+                if (gs.m_FrameCounter % gs.m_SortNthFrame == 0)
+                    gs.SortPoints(cmb, cam, matrix);
+                ++gs.m_FrameCounter;
 
                 // draw
                 MeshTopology topology = MeshTopology.Triangles;
