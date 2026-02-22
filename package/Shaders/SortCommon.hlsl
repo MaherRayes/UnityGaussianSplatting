@@ -95,7 +95,7 @@ ByteAddressBuffer b_sortCount;
 
 uint GetActiveNumKeys()
 {
-    return b_sortCount.Load(0);
+    return min(b_sortCount.Load(0), e_numKeys);
 }
 
 //*****************************************************************************

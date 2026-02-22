@@ -154,7 +154,7 @@ namespace GaussianSplatting.Runtime
             uint maxThreadBlocks = DivRoundUp(maxCount, DEVICE_RADIX_SORT_PARTITION_SIZE);
 
             // Keep max width for histogram layout.
-            //cmd.SetComputeIntParam(m_CS, "e_numKeys", (int)maxCount);
+            cmd.SetComputeIntParam(m_CS, "e_numKeys", (int)maxCount);
             cmd.SetComputeIntParam(m_CS, "e_threadBlocks", (int)maxThreadBlocks);
 
             // --- Build indirect args on GPU ---
