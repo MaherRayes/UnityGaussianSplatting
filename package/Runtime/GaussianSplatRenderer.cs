@@ -163,22 +163,24 @@ namespace GaussianSplatting.Runtime
                 // draw
                 MeshTopology topology = MeshTopology.Triangles;
 
-                if (gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds)
+                if (gs.m_RenderMode != GaussianSplatRenderer.RenderMode.Splats)
                 {
-                    int indexCount = 36;
-                    int instanceCount = gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0;
+                    int indexCount = gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugBoxes ||
+                                     gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds ? 36 : 6;
+                    int instanceCount = gs.splatCount;
+
+                    if(gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugChunkBounds)
+                        instanceCount = gs.m_GpuChunksValid ? gs.m_GpuChunks.count : 0;
+
+                    cmb.BeginSample(s_ProfDraw);
                     cmb.DrawProcedural(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology,
                         indexCount, instanceCount, mpb);
+                    cmb.EndSample(s_ProfDraw);
                 }
                 else
                 {
-                    // Indirect args choose quad vs cube
-                    GraphicsBuffer args = gs.m_RenderMode == GaussianSplatRenderer.RenderMode.DebugBoxes
-                        ? gs.drawArgsCube
-                        : gs.drawArgsQuad;
-
                     cmb.BeginSample(s_ProfDraw);
-                    cmb.DrawProceduralIndirect(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, args, 0, mpb);
+                    cmb.DrawProceduralIndirect(gs.m_GpuIndexBuffer, matrix, displayMat, 0, topology, gs.drawArgsQuad, 0, mpb);
                     cmb.EndSample(s_ProfDraw);
                 }
             }
