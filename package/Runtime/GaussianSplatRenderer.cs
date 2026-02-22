@@ -153,7 +153,7 @@ namespace GaussianSplatting.Runtime
                 cmb.BeginSample(s_ProfCalcView);
                 gs.CalcViewData(cmb, cam);
                 cmb.EndSample(s_ProfCalcView);
-				
+
                 // sort
                 var matrix = gs.transform.localToWorldMatrix;
                 if (gs.m_FrameCounter % gs.m_SortNthFrame == 0)
@@ -317,8 +317,6 @@ namespace GaussianSplatting.Runtime
 
         //buffers for frustum culling
         GraphicsBuffer m_GpuVisibleKeyCount;
-        int m_LastVisibilityFrame = -1;
-        int m_LastVisibilityCameraId = 0;
 
         //argument buffers for the indirect dispatch/draw commands
         GraphicsBuffer m_GpuArgsDispatchVisible; // 3 uints
@@ -873,13 +871,9 @@ namespace GaussianSplatting.Runtime
 
         void UpdateVisibilityAndIndirectArgs(CommandBuffer cmb, Matrix4x4 localToWorld, Camera cam)
         {
-            // avoid updating twice in the same frame for the same camera (can happen due to m_SortNthFrame)
-            int camId = cam ? cam.GetInstanceID() : 0;
-            int frame = Time.renderedFrameCount;
-            if (m_LastVisibilityFrame == frame && m_LastVisibilityCameraId == camId) return;
-
-            m_LastVisibilityFrame = frame;
-            m_LastVisibilityCameraId = camId;
+            // Skip Culling if the frame is not sorted
+            if(m_FrameCounter % m_SortNthFrame != 0)
+                return;
 
             EnsureCullBuffers(m_SplatCount);
             EnsureIndirectArgsBuffers();
@@ -904,26 +898,6 @@ namespace GaussianSplatting.Runtime
             if (cam.cameraType == CameraType.Preview) return;
 
             int sortCount = m_SplatCount;
-
-            //Frustum culling
-            UpdateVisibilityAndIndirectArgs(cmd, matrix, cam);
-
-            EnsureCullBuffers(m_SplatCount);
-            EnsureIndirectArgsBuffers();
-
-            // running DispatchCullAndBuildVisibleKeys inside UpdateVisibilityAndIndirectArgs is not reliable in edit mode.
-            // Therefore we run it here again.
-            bool editMode = !Application.isPlaying;
-            if (editMode)
-                DispatchCullAndBuildVisibleKeys(cmd, matrix);
-
-            // build indirect args buffers from m_GpuVisibleKeyCount
-            cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatCount, m_SplatCount);
-            cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.BuildIndirectArgs, Props.VisibleKeyCount, m_GpuVisibleKeyCount);
-            cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.BuildIndirectArgs, Props.ArgsDispatchVisible, m_GpuArgsDispatchVisible);
-            cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.BuildIndirectArgs, Props.ArgsDrawQuad, m_GpuArgsDrawQuad);
-            cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.BuildIndirectArgs, Props.ArgsDrawCube, m_GpuArgsDrawCube);
-            cmd.DispatchCompute(m_CSSplatUtilities, (int)KernelIndices.BuildIndirectArgs, 1, 1, 1);
 
             Matrix4x4 worldToCamMatrix = cam.worldToCameraMatrix;
             worldToCamMatrix.m20 *= -1;

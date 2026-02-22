@@ -91,6 +91,7 @@ struct DigitStruct
 #endif
 };
 
+// number of active keys to sort in the dispatch
 ByteAddressBuffer b_sortCount;
 
 uint GetActiveNumKeys()
