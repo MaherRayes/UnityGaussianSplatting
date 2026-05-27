@@ -25,3 +25,7 @@
 /projects/**/UserSettings/*
 /projects/**/obj/*
 *.sln.DotSettings.user
+
+/projects/**/.vscode
+/projects/**/GaussianExample.slnx
+/projects/**/MultiplayerManager.asset
