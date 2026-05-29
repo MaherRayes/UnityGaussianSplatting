@@ -45,6 +45,8 @@ float4 _VecWorldSpaceCameraPos;
 int _SelectionMode;
 
 RWStructuredBuffer<uint> _SplatSortDistances;
+uint _SplatSortDistancesOffset;
+uint _SplatSortDistancesGlobalMode;
 RWStructuredBuffer<uint> _SplatSortKeys;
 uint _SplatCount;
 
@@ -73,15 +75,16 @@ void CSCalcDistances (uint3 id : SV_DispatchThreadID)
     if (idx >= _SplatCount)
         return;
 
-    uint origIdx = _SplatSortKeys[idx];
+    uint origIdx = _SplatSortDistancesGlobalMode ? idx : _SplatSortKeys[idx];
 
     float3 pos = LoadSplatPos(origIdx);
     pos = mul(_MatrixMV, float4(pos.xyz, 1)).xyz;
 
-    _SplatSortDistances[idx] = FloatToSortableUint(pos.z);
+    _SplatSortDistances[idx + _SplatSortDistancesOffset] = FloatToSortableUint(pos.z);
 }
 
 RWStructuredBuffer<SplatViewData> _SplatViewData;
+uint _SplatViewDataOffset;
 
 float _SplatScale;
 float _SplatOpacityScale;
@@ -248,7 +251,7 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         view.color.y = (f32tof16(col.b) << 16) | f32tof16(col.a);
     }
     
-    _SplatViewData[idx] = view;
+    _SplatViewData[idx + _SplatViewDataOffset] = view;
 }
 
 

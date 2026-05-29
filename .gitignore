@@ -25,3 +25,13 @@
 /projects/**/UserSettings/*
 /projects/**/obj/*
 *.sln.DotSettings.user
+/projects/**/Assets/TextMesh Pro
+/projects/**/Assets/TextMesh Pro.meta
+/projects/**/Assets/Scripts
+/projects/**/Assets/Scripts.meta
+/projects/**/Assets/CollisionAssets
+/projects/**/Assets/CollisionAssets.meta
+/projects/**/Assets/GSTestScene.unity
+/projects/**/.vscode
+/projects/**/GaussianExample.slnx
+/projects/**/Packages/*
