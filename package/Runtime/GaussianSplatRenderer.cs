@@ -83,6 +83,7 @@ namespace GaussianSplatting.Runtime
                 }
 
                 m_ActiveSplats.Clear();
+                m_GlobalRenderer?.Dispose();
                 m_CommandBuffer?.Dispose();
                 m_CommandBuffer = null;
                 Camera.onPreCull -= OnPreCullCamera;
@@ -94,9 +95,10 @@ namespace GaussianSplatting.Runtime
             m_GlobalSettings = globalSettings;
         }
 
-        public void UnregisterGlobalSettings()
+        public void UnregisterGlobalSettings(GaussianSplatGlobalSettings globalSettings)
         {
-            m_GlobalSettings = null;
+            if(m_GlobalSettings == globalSettings)
+                m_GlobalSettings = null;
         }
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
@@ -234,14 +236,19 @@ namespace GaussianSplatting.Runtime
             if (m_ActiveSplats.Count == 0 || m_TotalSplatCount <= 0)
                 return null;
 
-            GaussianSplatRenderer firstSplat = m_ActiveSplats[0].renderer;
-            firstSplat.EnsureMaterials();
+            if(!m_GlobalSettings.EnsureMaterials())
+                return null;
 
-            bool skipSorting = m_GlobalRenderer.m_FrameCounter % m_GlobalSettings.m_GlobalSortNthFrame != 0;
+            Material displayMat = m_GlobalSettings.GlobalSplatsMaterial;
+            Material matComposite = m_GlobalSettings.GlobalCompositeMaterial;
 
-            m_GlobalRenderer.EnsureCapacity(m_TotalSplatCount, firstSplat.m_CSSplatUtilities);
+            bool recreatedGlobalBuffers = m_GlobalRenderer.EnsureCapacity(m_TotalSplatCount, m_GlobalSettings.CSSplatUtilities);
+
+            bool skipSorting = !recreatedGlobalBuffers && m_GlobalRenderer.m_FrameCounter % m_GlobalSettings.m_GlobalSortNthFrame != 0;
+
+            
             if (!skipSorting)
-                m_GlobalRenderer.InitSortKeys(cmb, m_TotalSplatCount);
+                m_GlobalRenderer.InitSortKeys(cmb);
 
             foreach (var kvp in m_ActiveSplats)
             {
@@ -272,10 +279,10 @@ namespace GaussianSplatting.Runtime
 
             // Draw call - Debug render modes aren't supported in global sort mode.
             cmb.BeginSample(s_ProfDraw);
-            cmb.DrawProcedural(firstSplat.m_GpuIndexBuffer, Matrix4x4.identity, firstSplat.m_MatSplats, 0, MeshTopology.Triangles, 6, m_TotalSplatCount, mpb);
+            cmb.DrawProcedural(m_GlobalRenderer.indexBuffer, Matrix4x4.identity, displayMat, 0, MeshTopology.Triangles, 6, m_TotalSplatCount, mpb);
             cmb.EndSample(s_ProfDraw);
 
-            return firstSplat.m_MatComposite;
+            return matComposite;
         }
 
         // ReSharper disable once MemberCanBePrivate.Global - used by HDRP/URP features that are not always compiled
@@ -311,6 +318,11 @@ namespace GaussianSplatting.Runtime
 
             // add sorting, view calc and drawing commands for each splat object
             Material matComposite = SortAndRenderSplats(cam, m_CommandBuffer);
+            if (matComposite == null)
+            {
+                m_CommandBuffer.ReleaseTemporaryRT(GaussianSplatRenderer.Props.GaussianSplatRT);
+                return;
+            }
 
             // compose
             m_CommandBuffer.BeginSample(s_ProfCompose);
@@ -326,6 +338,7 @@ namespace GaussianSplatting.Runtime
         public GraphicsBuffer sortkeys;
         public GraphicsBuffer sortDistances;
         public GraphicsBuffer viewData;
+        public GraphicsBuffer indexBuffer;
 
         readonly MaterialPropertyBlock m_Mpb = new();
         public MaterialPropertyBlock mpb => m_Mpb;
@@ -338,13 +351,12 @@ namespace GaussianSplatting.Runtime
         int m_Capacity;
         int m_Count;
 
-        public void EnsureCapacity(int totalSplatCount, ComputeShader cs)
+        public bool EnsureCapacity(int totalSplatCount, ComputeShader cs)
         {
-            m_CSSplatUtilities = cs;
             m_Count = totalSplatCount;
 
             if(totalSplatCount <= 0)
-                return;
+                return false;
 
             bool needsRecreate =
                 sortkeys == null ||
@@ -355,17 +367,21 @@ namespace GaussianSplatting.Runtime
 
             if (!needsRecreate)
             {
-                m_SorterArgs.count = (uint)m_Count;
-                return;
+                bool changedCount = m_SorterArgs.count != (uint)m_Count;
+                if(changedCount)
+                    m_SorterArgs.count = (uint)m_Count;
+                return changedCount;
             }
 
             //dispose of old buffers
             sortDistances?.Dispose();
             sortkeys?.Dispose();
             viewData?.Dispose();
+            indexBuffer?.Dispose();
             m_SorterArgs.resources.Dispose();
 
             m_Capacity = totalSplatCount;
+            m_CSSplatUtilities = cs;
 
             //initialize global buffers
             sortDistances = new GraphicsBuffer(GraphicsBuffer.Target.Structured, totalSplatCount, 4) { name = "GlobalGaussianSplatSortDistances" };
@@ -383,12 +399,28 @@ namespace GaussianSplatting.Runtime
             m_SorterArgs.count = (uint)totalSplatCount;
             if (m_Sorter.Valid)
                 m_SorterArgs.resources = GpuSorting.SupportResources.Load((uint)totalSplatCount);
+
+            //initialize quad index buffer
+
+            indexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Index, 36, 2);
+            // cube indices, most often we use only the first quad
+            indexBuffer.SetData(new ushort[]
+            {
+                0, 1, 2, 1, 3, 2,
+                4, 6, 5, 5, 6, 7,
+                0, 2, 4, 4, 2, 6,
+                1, 5, 3, 5, 7, 3,
+                0, 4, 1, 4, 5, 1,
+                2, 3, 6, 3, 7, 6
+            });
+
+            return true;
         }
 
-        public void InitSortKeys(CommandBuffer cmd, int totalSplatCount)
+        public void InitSortKeys(CommandBuffer cmd)
         {
 
-            if(totalSplatCount <= 0)
+            if(m_Count <= 0)
                 return;
 
             // init keys buffer to splat indices
@@ -413,9 +445,17 @@ namespace GaussianSplatting.Runtime
             sortkeys?.Dispose();
             sortDistances?.Dispose();
             viewData?.Dispose();
+            indexBuffer.Dispose();
             m_SorterArgs.resources.Dispose();
+
+            sortkeys = null;
+            sortDistances = null;
+            viewData = null;
+            indexBuffer = null;
+
             m_Capacity = 0;
             m_Count = 0;
+            m_FrameCounter = 0;
         }
     }
 
