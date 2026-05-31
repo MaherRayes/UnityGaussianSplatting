@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace GaussianSplatting.Runtime
 {
@@ -13,26 +14,36 @@ namespace GaussianSplatting.Runtime
             GlobalSort
         }
 
+        public enum SortMode
+        {
+            Radix,
+            FFX
+        }
+
         public SplatRenderStrategy m_RenderStrategy = SplatRenderStrategy.PerObject;
 
         [Min(1)]
         public int m_GlobalSortNthFrame = 1;
 
+        public SortMode m_SortMode;
+
         [Header("Global Sort Materials")]
         [SerializeField] Shader m_GlobalSplatsShader;
         [SerializeField] Shader m_GlobalCompositeShader;
-        [SerializeField] ComputeShader m_CSSplatUtilities;
+        [SerializeField] ComputeShader m_CSSplatUtilitiesRadix;
+        [SerializeField] ComputeShader m_CSSplatUtilitiesFFX;
 
         Material m_GlobalSplatsMaterial;
         Material m_GlobalCompositeMaterial;
 
         public Material GlobalSplatsMaterial => m_GlobalSplatsMaterial;
         public Material GlobalCompositeMaterial => m_GlobalCompositeMaterial;
-        public ComputeShader CSSplatUtilities => m_CSSplatUtilities;
+        public ComputeShader CSSplatUtilitiesRadix => m_CSSplatUtilitiesRadix;
+        public ComputeShader CSSplatUtilitiesFFX => m_CSSplatUtilitiesFFX;
 
         public bool EnsureMaterials()
         {
-            if (m_GlobalSplatsShader == null || m_GlobalCompositeShader == null || m_CSSplatUtilities == null)
+            if (m_GlobalSplatsShader == null || m_GlobalCompositeShader == null || m_CSSplatUtilitiesRadix == null || m_CSSplatUtilitiesFFX == null)
                 return false;
 
             if (m_GlobalSplatsMaterial == null)
@@ -78,6 +89,13 @@ namespace GaussianSplatting.Runtime
         {
             m_GlobalSortNthFrame = Mathf.Max(1, m_GlobalSortNthFrame);
         }
+
+        public void ResetGlobalSorter()
+        {
+            GaussianSplatRenderSystem.instance.m_GlobalRenderer.ResetSorter();
+        }
+
+        //public static SortMode ResolveSortMode(SortMode requested) => isRadixSupported ? requested : SortMode.FFX;
 
     }
 }

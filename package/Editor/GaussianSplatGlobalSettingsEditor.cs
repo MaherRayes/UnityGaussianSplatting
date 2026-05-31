@@ -11,9 +11,11 @@ namespace GaussianSplatting.Editor
     {
         SerializedProperty m_PropRenderStrategy;
         SerializedProperty m_PropGlobalSortNthFrame;
+        SerializedProperty m_PropSortMode;
         SerializedProperty m_PropShaderSplats;
         SerializedProperty m_PropShaderComposite;
-        SerializedProperty m_PropCSSplatUtilities;
+        SerializedProperty m_PropCSSplatUtilitiesRadix;
+        SerializedProperty m_PropCSSplatUtilitiesFFX;
 
         bool m_ResourcesExpanded = true;
 
@@ -21,9 +23,11 @@ namespace GaussianSplatting.Editor
         {
             m_PropRenderStrategy = serializedObject.FindProperty("m_RenderStrategy");
             m_PropGlobalSortNthFrame = serializedObject.FindProperty("m_GlobalSortNthFrame");
+            m_PropSortMode = serializedObject.FindProperty("m_SortMode");
             m_PropShaderSplats = serializedObject.FindProperty("m_GlobalSplatsShader");
             m_PropShaderComposite = serializedObject.FindProperty("m_GlobalCompositeShader");
-            m_PropCSSplatUtilities = serializedObject.FindProperty("m_CSSplatUtilities");
+            m_PropCSSplatUtilitiesRadix = serializedObject.FindProperty("m_CSSplatUtilitiesRadix");
+            m_PropCSSplatUtilitiesFFX = serializedObject.FindProperty("m_CSSplatUtilitiesFFX");
         }
 
         public override void OnInspectorGUI()
@@ -50,6 +54,30 @@ namespace GaussianSplatting.Editor
                 );
             }
 
+            EditorGUI.BeginChangeCheck();           
+            EditorGUILayout.PropertyField(m_PropSortMode);
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+
+                foreach (var obj in targets)
+                {
+                    if (obj is GaussianSplatRenderer renderer && renderer.enabled)
+                    {
+                        renderer.Reset();
+                        EditorUtility.SetDirty(renderer);
+                    }
+
+                    if(obj is GaussianSplatGlobalSettings globalSettings)
+                    {
+                        globalSettings.ResetGlobalSorter();
+                        EditorUtility.SetDirty(globalSettings);
+                    }
+                }
+
+                return;
+            }
+
             EditorGUILayout.Space();
 
             m_ResourcesExpanded = EditorGUILayout.Foldout(
@@ -63,7 +91,8 @@ namespace GaussianSplatting.Editor
             {
                 EditorGUILayout.PropertyField(m_PropShaderSplats);
                 EditorGUILayout.PropertyField(m_PropShaderComposite);
-                EditorGUILayout.PropertyField(m_PropCSSplatUtilities);
+                EditorGUILayout.PropertyField(m_PropCSSplatUtilitiesRadix);
+                EditorGUILayout.PropertyField(m_PropCSSplatUtilitiesFFX);
             }
 
             if (globalSort && HasMissingResources())
@@ -81,7 +110,8 @@ namespace GaussianSplatting.Editor
         {
             return m_PropShaderSplats.objectReferenceValue == null ||
                    m_PropShaderComposite.objectReferenceValue == null ||
-                   m_PropCSSplatUtilities.objectReferenceValue == null;
+                   m_PropCSSplatUtilitiesRadix.objectReferenceValue == null ||
+                   m_PropCSSplatUtilitiesFFX.objectReferenceValue == null;
         }
     }
 }
