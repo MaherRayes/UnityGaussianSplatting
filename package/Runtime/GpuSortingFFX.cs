@@ -186,7 +186,7 @@ namespace GaussianSplatting.Runtime
             var scratchBufferRead = resources.scratchBuffer;
             if (copyReadBuffers)
             {
-                if (resources.scratchBufferTemp == null || resources.scratchBufferTemp.count != resources.scratchBufferTemp.count)
+                if (resources.scratchBufferTemp == null || resources.scratchBufferTemp.count != resources.scratchBuffer.count)
                 {
                     resources.scratchBufferTemp?.Dispose();
                     var src = resources.scratchBuffer;
